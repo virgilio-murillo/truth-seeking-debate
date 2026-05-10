@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+debate_state.json
+found_truths.jsonl
+test_output.log
+.kiro/
