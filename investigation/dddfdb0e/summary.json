@@ -1,0 +1,24 @@
+{
+  "job_id": "dddfdb0e",
+  "description": "How to implement an ELASTIC POOL OF PERSISTENT AGENTS for a multi-agent debate system in Python. This is for a truth-seeking debate system where agents debate topics in structured rounds.\n\n## REQUIREMENTS:\n1. **4\u201310 persistent agents** that stay alive across the entire debate (not spawned per-turn)\n2. **Elastic scaling**: start with 4, scale up based on queue depth, scale down when idle\n3. **Hard cap: 15 total agents on the Mac** \u2014 check system-wide before spawning (`pgrep -c kiro-cli` or similar)\n4. **Shared work queue**: agents pull work items (debate turns, judging tasks) from a queue\n5. **Conversational memory**: each agent remembers its prior exchanges without re-sending full history\n6. **Role flexibility**: an agent can be Team A on one contention and Team B on another\n\n## TECHNICAL CONTEXT:\n- Python 3.12+ with asyncio\n- Currently uses `kiro-cli chat --no-interactive` subprocess per call (700+ spawns in one debate)\n- Each agent needs access to MCP tools (bible-tools, web_search, etc.) for research during debate\n- The debate orchestrator manages a priority queue of ContentionNode objects\n- Each contention has up to 7 rounds of Team A \u2194 Team B exchanges, then a judge decides\n\n## KEY QUESTIONS TO INVESTIGATE:\n\n### 1. Persistent Agent Sessions\n- How to maintain a long-running LLM conversation session in Python?\n- Bedrock Converse API vs Anthropic Messages API vs kiro-cli persistent sessions?\n- How does each handle conversation history / context window limits?\n- Can we use Bedrock's `converse_stream` for real-time signal detection (AGREEMENT, CHILD_CONTENTION)?\n- How to give persistent agents access to MCP tools (bible-tools server)?\n\n### 2. Elastic Pool Pattern\n- Best patterns for elastic worker pools in asyncio (like a thread pool but for LLM agents)\n- How to monitor queue depth and decide when to scale up/down?\n- How to gracefully retire an agent (let it finish current work, then kill)?\n- How to check system-wide process count on macOS (`pgrep`, `ps aux | wc -l`)?\n- Backpressure: what happens when all agents are busy and queue grows?\n\n### 3. Conversational Memory Management\n- How to handle context window limits (200k tokens) for very long debates?\n- Summarization strategies: when to summarize old exchanges?\n- Can we use Anthropic's prompt caching to cache the system prompt + established truths?\n- How to \"brief\" a new agent that joins mid-debate on existing context?\n\n### 4. Work Distribution\n- Should agents specialize (always Team A, always judge) or be generalists?\n- How to route work items: round-robin, least-busy, affinity-based?\n- If Agent-3 debated contention X rounds 1-3, should it continue rounds 4-7? (affinity)\n- How to handle the judge role \u2014 dedicated agent or any agent can judge?\n\n### 5. MCP Tool Access for Persistent Agents\n- The debate agents need MCP tools (bible-tools, web_search) for research\n- How to connect a persistent Bedrock/Anthropic session to MCP tool servers?\n- Can we use the MCP Python SDK to bridge tools into API calls?\n- Alternative: pre-research phase, then debate without tools?\n\n### 6. Implementation Patterns (find real examples)\n- AutoGen (Microsoft) agent pools\n- CrewAI persistent agents\n- LangGraph with persistent state\n- OpenAI Assistants API (threads = persistent conversations)\n- Any Python library that implements elastic LLM agent pools?\n\n### 7. Specific to kiro-cli\n- Does kiro-cli support persistent/session mode?\n- Can we pipe messages to a running kiro-cli process (stdin)?\n- Alternative: use kiro-cli's underlying API directly?\n\n## CONSTRAINTS:\n- Must run on macOS (Apple Silicon M-series)\n- Must not exceed 15 total agent processes system-wide\n- Must support MCP tools (bible-tools at minimum)\n- Python asyncio-based orchestrator\n- Should be implementable in <500 lines of Python",
+  "total_seconds": 670,
+  "phases": {
+    "investigating": "21:01:55",
+    "orchestrating": "21:06:01",
+    "visualizing": "21:10:41",
+    "complete": "21:13:01"
+  },
+  "control_actions": [
+    {
+      "action": "skip_validation",
+      "target": "all"
+    },
+    {
+      "action": "finalize",
+      "target": null
+    }
+  ],
+  "findings_count": 26,
+  "has_report": true,
+  "has_pdf": true
+}

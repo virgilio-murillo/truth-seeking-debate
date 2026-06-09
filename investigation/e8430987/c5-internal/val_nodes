@@ -1,0 +1,11 @@
+21:29:44|Starting validation
+21:30:06|Reading findings file
+21:30:32|Verifying ACP command
+21:30:46|Checking session format
+21:31:01|Verifying Botctl code
+21:31:21|Checking protocol details
+21:31:38|Verifying version claim
+21:31:54|Checking ACP origin
+21:32:35|Checking systemPrompt claim
+21:33:03|Writing validated file
+21:35:01|Validation complete

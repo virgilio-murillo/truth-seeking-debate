@@ -1,0 +1,32 @@
+{
+  "job_id": "e8430987",
+  "description": "How to implement PERSISTENT kiro-cli agents that poll a work queue and never stop. This is for a truth-seeking debate system.\n\n## CONSTRAINT: Must use kiro-cli (not direct Bedrock API)\nkiro-cli provides MCP tools (bible-tools, web_search, patristic_commentary, morphology_analysis, etc.) that cannot be easily replicated. Each agent MUST be a kiro-cli process.\n\n## THE IDEA:\nInstead of spawning 700+ kiro-cli processes (one per turn), keep 4\u201310 kiro-cli processes alive permanently. Each agent is instructed to:\n1. Poll a work queue (file-based, Redis, or filesystem)\n2. Pick up a work item (debate turn, judge task)\n3. Execute it using their MCP tools\n4. Write the result back\n5. Go back to step 1 \u2014 NEVER STOP\n\nIf an agent tries to stop or says \"task complete\", the system reminds it to keep polling.\n\n## QUESTIONS TO INVESTIGATE:\n\n### 1. kiro-cli Interactive Mode via stdin/stdout pipes\n- Can you pipe messages to `kiro-cli chat` (interactive mode) via stdin?\n- Does kiro-cli support reading from stdin in a non-TTY context?\n- What's the message delimiter/protocol for stdin input?\n- Can you detect when kiro-cli has finished responding (output delimiter)?\n- Does `kiro-cli chat --no-interactive` accept multiple prompts sequentially?\n\n### 2. kiro-cli as a Long-Running Agent with File-Based Queue\n- Can you instruct a kiro-cli agent (via system prompt/steering) to:\n  - Watch a file/directory for new work items\n  - Process each item using its tools\n  - Write results to an output file\n  - Loop forever\n- What happens when kiro-cli's context window fills up? Does it auto-compact?\n- How long can a kiro-cli session stay alive?\n- Does kiro-cli have a `--session` or `--persistent` flag?\n\n### 3. The \"Never Stop\" Pattern\n- How to instruct an LLM agent to run in an infinite loop?\n- What prompt engineering prevents the agent from deciding it's \"done\"?\n- How to handle context window exhaustion in a long-running agent?\n- Can the agent use shell tools to read from a queue file?\n- Pattern: agent reads `queue/pending/*.json`, processes, moves to `queue/done/*.json`\n\n### 4. Queue Implementation Options\n- **Filesystem queue**: `queue/pending/001.json` \u2192 agent reads \u2192 writes `queue/results/001.json`\n- **Named pipe (FIFO)**: `mkfifo /tmp/debate_queue` \u2014 agent reads from pipe\n- **SQLite**: lightweight DB queue\n- **Redis**: if available\n- Which is simplest for kiro-cli agents to interact with using shell/file tools?\n\n### 5. Orchestrator \u2194 Agent Communication\n- Orchestrator writes work items to queue\n- Agent picks up items, executes, writes results\n- Orchestrator polls for results\n- How to handle: agent crashes, agent gets stuck, agent context fills up?\n- How to restart an agent that died without losing state?\n\n### 6. kiro-cli Specific Capabilities\n- What flags does kiro-cli chat support? (--agent, --no-interactive, --trust-all-tools, --session, --wrap, etc.)\n- Can kiro-cli read a task from a file? (`kiro-cli chat --file task.md`?)\n- Does kiro-cli support `--context` or `--system-prompt` flags?\n- Can you set a custom agent that has \"poll queue forever\" in its steering?\n- What's the kiro-cli agent definition format? Can we create a custom \"debate-worker\" agent?\n\n### 7. Alternative: Repeated --no-interactive Calls with Shared State\n- If persistent sessions aren't possible, can we approximate persistence by:\n  - Using a shared state file that each call reads/writes?\n  - Passing a \"memory\" file as context to each --no-interactive call?\n  - Using kiro-cli's knowledge base feature to maintain debate state?\n- How much overhead does each --no-interactive call have? (the 15-20s floor)\n\n### 8. The launch_agent / agent_status / agent_result Pattern\n- The current kiro-agents MCP tools (launch_agent, agent_status, agent_result) already manage agent lifecycle\n- Can we use launch_agent to start a \"forever agent\" that polls a queue?\n- What happens if we launch_agent with a task like \"Poll /tmp/queue forever, process each item\"?\n- Does the agent stay alive until explicitly stopped?\n\n### 9. Context Window Management for Long-Running Agents\n- kiro-cli uses context compaction when approaching limits\n- How does this work? Does it preserve tool access?\n- Can a compacted agent still read files and use tools?\n- What's the effective \"lifetime\" of a kiro-cli session before it degrades?\n\n### 10. Elastic Scaling with kiro-cli\n- Start 4 kiro-cli processes\n- Monitor queue depth\n- If queue backs up: launch more (up to 10, system cap 15)\n- If agents idle: stop them gracefully\n- How to count total kiro-cli processes: `pgrep -c kiro-cli`\n- How to stop a specific agent: stop_agent(job_id) or kill PID?\n\n## CURRENT SYSTEM CONTEXT:\n- macOS Apple Silicon\n- kiro-cli installed at /Users/murivirg/.local/bin/kiro-cli\n- Agents defined in ~/.kiro/agents/ (YAML format)\n- MCP tools configured in kiro-cli config\n- The debate system is Python asyncio-based\n- Current acp.py spawns `kiro-cli chat --no-interactive --agent bible-expert --trust-all-tools <task>`\n\n## WHAT I NEED:\nA concrete implementation plan for making kiro-cli agents persistent queue workers that:\n1. Stay alive for the entire debate (not per-turn)\n2. Poll a filesystem queue for work items\n3. Use their MCP tools (bible-tools, web_search) to process each item\n4. Write results back\n5. Never stop until explicitly killed\n6. Scale elastically (4\u201310 agents, cap 15 system-wide)",
+  "total_seconds": 944,
+  "phases": {
+    "investigating": "21:23:09",
+    "orchestrating": "21:32:04",
+    "visualizing": "21:32:14",
+    "complete": "21:38:53"
+  },
+  "control_actions": [
+    {
+      "action": "redirect",
+      "target": "c5-internal"
+    },
+    {
+      "action": "redirect",
+      "target": "c4-docs"
+    },
+    {
+      "action": "skip_validation",
+      "target": "c2-kb"
+    },
+    {
+      "action": "finalize",
+      "target": null
+    }
+  ],
+  "findings_count": 33,
+  "has_report": true,
+  "has_pdf": true
+}

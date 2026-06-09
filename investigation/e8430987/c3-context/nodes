@@ -1,0 +1,9 @@
+21:23:03|Starting up
+21:23:32|Starting investigation
+21:24:01|Examining kiro-cli flags
+21:24:20|Testing stdin piping
+21:25:43|Resume sessions work
+21:26:58|FIFO persistence works
+21:27:40|Tools work in FIFO
+21:28:15|Analyzing core.py patterns
+21:29:33|Writing findings doc

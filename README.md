@@ -91,3 +91,33 @@ Based on research from: ReDel (EMNLP 2024), MACI, iMAD (AAAI 2025), D3 framework
 ## License
 
 MIT
+
+## Research & Improvements
+
+### Investigation: Speed & Quality Improvements (2026-05-13)
+
+After the OSAS debate ran 7+ hours (705 agents, 27 verdicts, depth=7), a profound investigation was launched to find improvements.
+
+**Location:** `investigation/ffe2051b/`
+
+**Key problems analyzed:**
+- Speed: 30-1500s per agent call (kiro-cli subprocess overhead)
+- Depth explosion: recursive children to depth=7
+- Growing context: established truths bloat every prompt
+- No early termination: 7 rounds even when converging
+- Redundancy: 12/27 verdicts were "both_correct"
+
+**Areas investigated:**
+1. Direct Bedrock API instead of kiro-cli subprocess
+2. Streaming + early signal detection
+3. Adaptive round count / convergence detection
+4. Prompt caching for growing truths context
+5. Better relevance gating to prevent depth explosion
+6. Tree pruning and debate budget caps
+7. Truth deduplication and summarization
+
+**To read the report:**
+```bash
+cat investigation/ffe2051b/report.md
+# or check individual agent findings in investigation/ffe2051b/
+```

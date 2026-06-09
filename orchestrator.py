@@ -13,20 +13,22 @@ from config import MAX_DEPTH, MAX_EXCHANGES, RELEVANCE_THRESHOLD, RELEVANCE_THRE
 
 
 class Orchestrator:
-    def __init__(self, topic: str, work_dir: str):
+    def __init__(self, topic: str, work_dir: str, agent: str = "investigator-child"):
         self.state = DebateState(topic=topic)
         self.work_dir = work_dir
+        self.agent = agent
         self.queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
         self._counter = 0
 
     async def run(self) -> DebateState:
-        print(f"[{_ts()}] [DEBATE] Topic: {self.state.topic}\n", flush=True)
+        print(f"[{_ts()}] [DEBATE] Topic: {self.state.topic}")
+        print(f"[{_ts()}] [AGENT] {self.agent}\n", flush=True)
 
         # Phase 1: Opening statements (parallel)
         print(f"[{_ts()}] [PHASE 1] Opening statements...", flush=True)
         self.state.opening_a, self.state.opening_b = await asyncio.gather(
-            call_agent(opening_prompt(self.state.topic, "a"), self.work_dir),
-            call_agent(opening_prompt(self.state.topic, "b"), self.work_dir),
+            call_agent(opening_prompt(self.state.topic, "a"), self.work_dir, agent=self.agent),
+            call_agent(opening_prompt(self.state.topic, "b"), self.work_dir, agent=self.agent),
         )
         print(f"[{_ts()}] Team A: {self.state.opening_a[:100]}...", flush=True)
         print(f"[{_ts()}] Team B: {self.state.opening_b[:100]}...\n", flush=True)
@@ -35,7 +37,7 @@ class Orchestrator:
         print(f"[{_ts()}] [PHASE 2] Identifying contentions...", flush=True)
         raw = await call_agent(
             contention_identification_prompt(self.state.opening_a, self.state.opening_b),
-            self.work_dir,
+            self.work_dir, agent=self.agent,
         )
         contentions = self._parse_contentions(raw)
         print(f"[{_ts()}] Found {len(contentions)} contention points\n", flush=True)
@@ -96,7 +98,7 @@ class Orchestrator:
             truths = self._truths_ctx()
 
             # Team A
-            a_resp = await call_agent(debate_round_prompt(node, "a", truths), self.work_dir)
+            a_resp = await call_agent(debate_round_prompt(node, "a", truths), self.work_dir, agent=self.agent)
             node.exchanges.append(Exchange(round=node.current_round, team="a", content=a_resp))
             print(f"    [{_ts()}] [W{wid}] R{node.current_round}A: {a_resp[:60]}...", flush=True)
 
@@ -104,7 +106,7 @@ class Orchestrator:
                 return
 
             # Team B (gets A's argument via full history in prompt)
-            b_resp = await call_agent(debate_round_prompt(node, "b", truths), self.work_dir)
+            b_resp = await call_agent(debate_round_prompt(node, "b", truths), self.work_dir, agent=self.agent)
             node.exchanges.append(Exchange(round=node.current_round, team="b", content=b_resp))
             print(f"    [{_ts()}] [W{wid}] R{node.current_round}B: {b_resp[:60]}...", flush=True)
 
@@ -132,7 +134,7 @@ class Orchestrator:
         if not agreement.get("reason"):
             return False
         # Validate
-        val_resp = await call_agent(agreement_validation_prompt(node, agreement, team), self.work_dir)
+        val_resp = await call_agent(agreement_validation_prompt(node, agreement, team), self.work_dir, agent=self.agent)
         val = _parse_json(val_resp)
         if val.get("valid"):
             node.status = Status.AGREED
@@ -155,7 +157,7 @@ class Orchestrator:
             return False
         # Relevance gate
         threshold = RELEVANCE_THRESHOLD_DEEP if parent.depth > 3 else RELEVANCE_THRESHOLD
-        gate_resp = await call_agent(relevance_gate_prompt(parent, data["claim"]), self.work_dir)
+        gate_resp = await call_agent(relevance_gate_prompt(parent, data["claim"]), self.work_dir, agent=self.agent)
         gate = _parse_json(gate_resp)
         if not gate.get("relevant") or gate.get("score", 0) < threshold:
             return False
@@ -175,7 +177,7 @@ class Orchestrator:
         return True
 
     async def _judge(self, node, wid):
-        resp = await call_agent(judge_prompt(node), self.work_dir)
+        resp = await call_agent(judge_prompt(node), self.work_dir, agent=self.agent)
         result = _parse_json(resp)
         node.winner = result.get("winner", "both_correct")
         node.truth = result.get("truth")

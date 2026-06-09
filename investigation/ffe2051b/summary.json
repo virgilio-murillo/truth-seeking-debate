@@ -1,0 +1,28 @@
+{
+  "job_id": "ffe2051b",
+  "description": "Analyze this truth-seeking debate system and propose improvements for SPEED and QUALITY. The system ran for 7+ hours, launched 705 agents, produced 27 verdicts, and was still running. It uses kiro-cli agents for each debate turn.\n\n## CURRENT ARCHITECTURE (Python orchestrator):\n- 4 worker coroutines process a priority queue of ContentionNode objects\n- Each contention goes through up to 7 rounds of Team A \u2192 Team B exchanges\n- After 7 rounds, a judge decides winner\n- Contentions can spawn CHILD_CONTENTION recursively (reached depth=7)\n- Each exchange = 1 kiro-cli subprocess call (expensive: 30-1500+ seconds each)\n- Semaphore limits to 10 concurrent processes\n- Truths accumulate and are passed to all subsequent prompts (growing context)\n\n## KEY PROBLEMS OBSERVED:\n1. SPEED: 7 hours for 27 verdicts. Each agent call takes 30-1500s because kiro-cli spawns a full LLM session with MCP tools (bible-tools, web_search, etc.)\n2. DEPTH EXPLOSION: Contentions spawn children recursively to depth=7, each requiring 7 rounds \u00d7 2 teams = 14 agent calls minimum before judging\n3. GROWING CONTEXT: The \"ESTABLISHED TRUTHS\" section grows with every verdict and is included in every prompt, making later calls slower\n4. NO EARLY TERMINATION: Even when both sides are clearly converging, must complete 7 rounds\n5. REDUNDANCY: Many \"both_correct\" verdicts (12/27) suggest the system debates things that don't need debating\n6. AGENT OVERHEAD: Each call spawns a full kiro-cli process with tool initialization\n\n## SOURCE CODE:\n```python\n# orchestrator.py (236 lines)\n- Orchestrator class with 4 workers\n- Priority queue (deeper nodes first, resumed parents boosted)\n- _run_contention: loops 7 rounds, Team A then Team B\n- _check_signals: detects AGREEMENT or CHILD_CONTENTION in responses\n- _judge: calls judge after 7 rounds\n- _notify_parent: resumes parent when all children resolved\n\n# acp.py (66 lines) \n- call_agent: spawns kiro-cli subprocess, waits for completion\n- Semaphore(10) for concurrency\n- Cleans ANSI output\n\n# config.py\n- MAX_DEPTH = 7, MAX_EXCHANGES = 7\n- RELEVANCE_THRESHOLD = 0.6 (0.8 for deep)\n\n# prompts.py\n- debate_round_prompt: includes full exchange history + all established truths\n- judge_prompt: includes all exchanges\n- relevance_gate_prompt: checks if child is material\n```\n\n## INVESTIGATE THESE IMPROVEMENT AREAS:\n\n### Speed improvements:\n1. Direct LLM API calls (Bedrock/Anthropic) instead of kiro-cli subprocess overhead\n2. Streaming responses to detect AGREEMENT/CHILD_CONTENTION early without waiting for full response\n3. Adaptive round count (stop early if convergence detected)\n4. Parallel Team A + Team B (give each the other's PREVIOUS round, not current)\n5. Batch judging (judge can evaluate multiple contentions at once?)\n6. Context window management (summarize old truths instead of including all)\n7. Caching: if same contention appears in different branches, reuse verdict\n\n### Quality improvements:\n1. Better relevance gating to prevent depth explosion\n2. Smarter contention identification (fewer but more meaningful contentions)\n3. Judge quality: should judge see the debate or just final positions?\n4. Steelman requirement: each side must steelman the other before arguing\n5. Convergence detection: if both sides agree on 80% of substance, force resolution\n6. Truth deduplication: many truths are redundant/overlapping\n7. Better prompt engineering for conciseness (current responses are 2000+ words each)\n8. Pre-debate research phase: let agents research independently before debating\n\n### Architecture improvements:\n1. Replace kiro-cli with direct Bedrock API (boto3) for 10x speed\n2. Use prompt caching (Anthropic/Bedrock) for the growing truths context\n3. Implement debate \"budget\" (max total agent calls, not just per-contention)\n4. Tree pruning: if a branch is clearly won after 3 rounds, stop early\n5. Worker pool scaling: more workers for shallow contentions, fewer for deep\n6. Persistent state: resume interrupted debates\n7. MCP tool access: give debate agents direct tool access via API instead of subprocess\n\nResearch multi-agent debate systems, Constitutional AI debate approaches, and LLM-based argumentation frameworks for best practices.",
+  "total_seconds": 1058,
+  "phases": {
+    "investigating": "20:30:48",
+    "orchestrating": "20:37:03",
+    "visualizing": "20:37:13",
+    "complete": "20:48:26"
+  },
+  "control_actions": [
+    {
+      "action": "skip_validation",
+      "target": "c2-kb"
+    },
+    {
+      "action": "skip_validation",
+      "target": "c4-docs"
+    },
+    {
+      "action": "finalize",
+      "target": null
+    }
+  ],
+  "findings_count": 29,
+  "has_report": true,
+  "has_pdf": true
+}

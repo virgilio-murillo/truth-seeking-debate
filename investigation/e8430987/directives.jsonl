@@ -1,0 +1,5 @@
+{"from":"head","to":"all","directive":"HEAD AGENT has confirmed: stdin pipe works, --resume-id does NOT restore memory, self-polling agent via shell while loop is viable. Focus remaining investigation on: (1) context window lifetime measurement, (2) output delimiter detection for stdin pipe mode, (3) pexpect/ptyprocess for interactive mode."}
+{"from":"head","to":"c5-internal","directive":"REDIRECT: Stop searching internal repos for kiro-cli worker patterns. Instead: test whether kiro-cli interactive mode (without --no-interactive) can be driven via pexpect or subprocess with PTY. What is the output delimiter when response is complete?"}
+{"from":"head","to":"c4-docs","directive":"REDIRECT: Focus on kiro-cli context compaction behavior. How many tokens/messages before compaction triggers? Does compaction preserve tool access? What is the effective session lifetime?"}
+{"from": "head", "to": "c5-internal", "directive": "HEAD WANTS TO REDIRECT YOU. Reason: N/A. Argue back within 45s or accept."}
+{"from": "head", "to": "c4-docs", "directive": "HEAD WANTS TO REDIRECT YOU. Reason: N/A. Argue back within 45s or accept."}

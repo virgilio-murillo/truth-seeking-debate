@@ -1,0 +1,9 @@
+21:27:59|Starting validation
+21:28:21|Reading findings file
+21:28:48|Verifying CLI flags
+21:29:12|Checking web sources
+21:29:49|Verifying kiro docs
+21:30:12|Checking compaction docs
+21:30:29|Verifying compaction cfg
+21:31:24|Writing validated file
+21:32:26|Validation complete

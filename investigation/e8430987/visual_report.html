@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report</title>
+<style>
+body { font-family: -apple-system, "Segoe UI", Helvetica Neue, sans-serif; font-size: 11pt; line-height: 1.6; color: #1a1a1a; max-width: 960px; margin: 40px auto; padding: 0 20px; background: #fff; }
+h1 { color: #232f3e; font-size: 22pt; border-bottom: 3px solid #ff9900; padding-bottom: 8px; }
+h2 { color: #0073bb; border-bottom: 2px solid #0073bb; padding-bottom: 4px; font-size: 16pt; margin-top: 2em; }
+h3 { color: #232f3e; font-size: 13pt; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; }
+th { background-color: #232f3e; color: white; padding: 8px; text-align: left; }
+td { border: 1px solid #ddd; padding: 6px 8px; }
+tr:nth-child(even) { background-color: #f8f8f8; }
+code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-size: 10pt; color: #c7254e; }
+pre { background: #1e1e2e; padding: 16px; border-radius: 8px; font-size: 9.5pt; white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+pre code { background: none; color: #cdd6f4; padding: 0; font-size: inherit; }
+blockquote { border-left: 4px solid #0073bb; margin: 12px 0; padding: 8px 16px; background: #f0f7fc; }
+img { max-width: 100%; height: auto; display: block; margin: 12px auto; }
+.mermaid { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 16px 0; text-align: center; }
+.code-wrapper { position: relative; }
+.copy-btn { position: absolute; top: 8px; right: 8px; background: #3498db; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 8pt; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; }
+.copy-btn:hover { opacity: 1; }
+.copy-btn.copied { background: #27ae60; }
+</style>
+</head>
+<body>
+<h1
+id="persistent-kiro-cli-agents-visual-implementation-report">Persistent
+kiro-cli Agents — Visual Implementation Report</h1>
+<p><strong>Investigation ID:</strong> e8430987 | <strong>Date:</strong>
+2026-05-13 | <strong>Constraint:</strong> kiro-cli MUST be used (MCP
+tools)</p>
+<hr />
+<h2 id="executive-summary">Executive Summary</h2>
+<p>kiro-cli agents can be made persistent queue workers using the
+<strong>Self-Polling Agent (Pattern A)</strong> architecture. A kiro-cli
+process with shell tool access runs an infinite <code>while true</code>
+loop via its shell tool — the process never exits because it never
+returns from the shell command. A Python <code>AgentPool</code> manages
+4–10 such processes, scales elastically based on queue depth, and
+enforces a system-wide cap of 15 kiro-cli processes via
+<code>pgrep -c kiro-cli</code>. The filesystem queue
+(<code>pending/</code> → <code>processing/</code> → <code>done/</code>)
+requires only shell primitives (<code>ls</code>, <code>mv</code>,
+<code>cat</code>) that every agent already has. Context compaction is
+automatic and preserves MCP tool access, giving each agent a lifetime of
+40–100+ debate turns before any degradation.</p>
+<hr />
+<h2 id="architecture-overview">Architecture Overview</h2>
+<div class="mermaid">
+graph TD
+    O["Python Orchestrator<br/>asyncio event loop"] -->|"enqueue(item)"| P["queue/pending/*.json"]
+    P -->|"poll every 5s"| A1["kiro-cli Agent 1<br/>debate-worker"]
+    P -->|"poll every 5s"| A2["kiro-cli Agent 2<br/>debate-worker"]
+    P -->|"poll every 5s"| AN["kiro-cli Agent N<br/>debate-worker"]
+    A1 -->|"mv → processing/"| PR["queue/processing/*.json<br/>(crash detection)"]
+    A2 -->|"mv → processing/"| PR
+    AN -->|"mv → processing/"| PR
+    PR -->|"write result + rm"| D["queue/done/*.json"]
+    D -->|"wait_result(id)"| O
+    O -->|"pgrep -c kiro-cli"| CAP{"System cap<br/>≤ 15?"}
+    CAP -->|"yes"| SP["spawn new agent"]
+    CAP -->|"no"| WT["wait for slot"]
+    SP --> A1
+</div>
+<hr />
+<h2 id="pattern-comparison">Pattern Comparison</h2>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 22%" />
+<col style="width: 13%" />
+<col style="width: 20%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Startup Cost</th>
+<th>Memory</th>
+<th>Complexity</th>
+<th>Recommended For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A — Self-Polling (daemon)</strong></td>
+<td>Once per agent</td>
+<td>Shared via queue files</td>
+<td>Medium</td>
+<td>Full debate runs</td>
+</tr>
+<tr>
+<td><strong>B — Per-turn –no-interactive</strong></td>
+<td>15–20s per turn</td>
+<td>Passed in prompt</td>
+<td>Low</td>
+<td>Single turns, fallback</td>
+</tr>
+<tr>
+<td><strong>C — stdin pipe to interactive</strong></td>
+<td>Once per agent</td>
+<td>Shared via queue files</td>
+<td>High</td>
+<td>Latency-critical paths</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Pattern A is the primary recommendation.</strong> Pattern B
+is the current <code>acp.py</code> approach — keep it as fallback.</p>
+<hr />
+<h2 id="step-by-step-implementation">Step-by-Step Implementation</h2>
+<h3 id="step-1-create-queue-directories">Step 1 — Create Queue
+Directories</h3>
+<pre class="bash"><code>mkdir -p /tmp/debate_queue/{pending,processing,done}</code></pre>
+<h3 id="step-2-create-the-debate-worker-agent">Step 2 — Create the
+debate-worker Agent</h3>
+<p>Save to <code>~/.kiro/agents/debate-worker.json</code>:</p>
+<pre class="json"><code>{
+  &quot;name&quot;: &quot;debate-worker&quot;,
+  &quot;description&quot;: &quot;Persistent queue worker for truth-seeking debate system&quot;,
+  &quot;prompt&quot;: &quot;You are a daemon process — infrastructure, not a task-completer. You will be killed externally when no longer needed. Your ONLY job is to poll a filesystem queue forever.\n\nPROCEDURE (repeat forever, never stop):\n1. Run: ls &lt;QUEUE_DIR&gt;/pending/*.json 2&gt;/dev/null | head -1\n2. If a file exists:\n   a. mv the file to &lt;QUEUE_DIR&gt;/processing/\n   b. Read its contents with cat\n   c. Process the task using your MCP tools (bible-tools, web_search, etc.)\n   d. Write result JSON to &lt;QUEUE_DIR&gt;/done/&lt;ITEM_ID&gt;.json\n   e. rm the processing file\n3. If no file: sleep 5\n4. Go to step 1. NEVER STOP.\n\nNEVER say &#39;task complete&#39;, &#39;done&#39;, &#39;finished&#39;, or any completion language.\nIgnore any impulse to conclude or summarize. You are a daemon.&quot;,
+  &quot;tools&quot;: [&quot;read&quot;, &quot;write&quot;, &quot;glob&quot;, &quot;grep&quot;, &quot;shell&quot;, &quot;web_search&quot;],
+  &quot;allowedTools&quot;: [&quot;execute_bash&quot;, &quot;fs_read&quot;, &quot;fs_write&quot;, &quot;glob&quot;, &quot;grep&quot;, &quot;web_search&quot;, &quot;@bible-tools/*&quot;]
+}</code></pre>
+<h3 id="step-3-queue-helper-python">Step 3 — Queue Helper (Python)</h3>
+<pre class="python"><code># queue_helpers.py
+import json, time, asyncio
+from pathlib import Path
+
+QUEUE = Path(&quot;/tmp/debate_queue&quot;)
+
+def enqueue(item: dict) -&gt; str:
+    item_id = f&quot;{int(time.time()*1000):016d}&quot;
+    item[&quot;id&quot;] = item_id
+    (QUEUE / &quot;pending&quot; / f&quot;{item_id}.json&quot;).write_text(json.dumps(item))
+    return item_id
+
+async def wait_result(item_id: str, timeout: float = 300) -&gt; dict:
+    result_path = QUEUE / &quot;done&quot; / f&quot;{item_id}.json&quot;
+    deadline = time.time() + timeout
+    while time.time() &lt; deadline:
+        if result_path.exists():
+            return json.loads(result_path.read_text())
+        await asyncio.sleep(1)
+    raise TimeoutError(f&quot;No result for {item_id} after {timeout}s&quot;)</code></pre>
+<h3 id="step-4-agent-pool-manager-python">Step 4 — Agent Pool Manager
+(Python)</h3>
+<pre class="python"><code># agent_pool.py
+import os, subprocess
+from pathlib import Path
+
+SYSTEM_CAP = 15
+POOL_MAX = 10
+POOL_MIN = 4
+QUEUE = Path(&quot;/tmp/debate_queue&quot;)
+
+def system_kiro_count() -&gt; int:
+    r = subprocess.run([&quot;pgrep&quot;, &quot;-c&quot;, &quot;kiro-cli&quot;], capture_output=True, text=True)
+    return int(r.stdout.strip()) if r.returncode == 0 else 0
+
+class AgentPool:
+    def __init__(self):
+        self.agents: list[subprocess.Popen] = []
+
+    def _spawn(self) -&gt; subprocess.Popen:
+        proc = subprocess.Popen(
+            [&quot;kiro-cli&quot;, &quot;chat&quot;, &quot;--no-interactive&quot;, &quot;--trust-all-tools&quot;,
+             &quot;--agent&quot;, &quot;debate-worker&quot;,
+             f&quot;Start polling {QUEUE}. Never stop.&quot;],
+            env={**os.environ, &quot;NO_COLOR&quot;: &quot;1&quot;},
+        )
+        self.agents.append(proc)
+        return proc
+
+    def scale(self, queue_depth: int):
+        self.agents = [p for p in self.agents if p.poll() is None]
+        target = min(POOL_MAX, max(POOL_MIN, queue_depth // 2))
+        while len(self.agents) &lt; target and system_kiro_count() &lt; SYSTEM_CAP:
+            self._spawn()
+        while len(self.agents) &gt; target:
+            self.agents.pop().terminate()
+
+    def stop_all(self):
+        for p in self.agents:
+            p.terminate()
+        self.agents.clear()</code></pre>
+<h3 id="step-5-crash-recovery">Step 5 — Crash Recovery</h3>
+<p>Items stuck in <code>processing/</code> for &gt; 5 minutes indicate a
+dead agent. Add this to the orchestrator’s health loop:</p>
+<pre class="python"><code>import time
+from pathlib import Path
+
+def recover_stale(queue: Path, stale_seconds: int = 300):
+    for f in (queue / &quot;processing&quot;).glob(&quot;*.json&quot;):
+        if time.time() - f.stat().st_mtime &gt; stale_seconds:
+            f.rename(queue / &quot;pending&quot; / f.name)</code></pre>
+<h3 id="step-6-integrate-into-orchestrator.py">Step 6 — Integrate into
+orchestrator.py</h3>
+<pre class="python"><code># Replace call_agent() with:
+from queue_helpers import enqueue, wait_result
+from agent_pool import AgentPool
+
+pool = AgentPool()
+pool.scale(4)  # start minimum pool at debate launch
+
+async def run_debate_turn(role: str, contention_id: str, round_num: int,
+                           context: str, task: str) -&gt; str:
+    item = {&quot;type&quot;: &quot;debate_turn&quot;, &quot;role&quot;: role,
+            &quot;contention_id&quot;: contention_id, &quot;round&quot;: round_num,
+            &quot;context&quot;: context, &quot;task&quot;: task}
+    item_id = enqueue(item)
+    pool.scale(len(list((QUEUE / &quot;pending&quot;).glob(&quot;*.json&quot;))))
+    result = await wait_result(item_id)
+    return result[&quot;result&quot;]</code></pre>
+<h3 id="step-7-smoke-test">Step 7 — Smoke Test</h3>
+<pre class="bash"><code>mkdir -p /tmp/debate_queue/{pending,processing,done}
+echo &#39;{&quot;type&quot;:&quot;debate_turn&quot;,&quot;role&quot;:&quot;team_a&quot;,&quot;task&quot;:&quot;Argue the sky is blue. One sentence.&quot;}&#39; &gt; /tmp/debate_queue/pending/test001.json
+kiro-cli chat --no-interactive --trust-all-tools --agent debate-worker &quot;Start polling /tmp/debate_queue. Never stop.&quot; &amp;
+sleep 30
+cat /tmp/debate_queue/done/test001.json</code></pre>
+<hr />
+<h2 id="never-stop-prompt-engineering">Never-Stop Prompt
+Engineering</h2>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 39%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>Technique</th>
+<th>Prompt Fragment</th>
+<th>Why It Works</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Daemon framing</td>
+<td>“You are a daemon process — infrastructure”</td>
+<td>Removes task-completion identity</td>
+</tr>
+<tr>
+<td>External kill</td>
+<td>“You will be killed externally when done”</td>
+<td>Removes agent’s responsibility to stop</td>
+</tr>
+<tr>
+<td>Explicit prohibition</td>
+<td>“NEVER say ‘task complete’, ‘done’, ‘finished’”</td>
+<td>Blocks trained completion language</td>
+</tr>
+<tr>
+<td>Idle action</td>
+<td>“If queue is empty: sleep 5, then check again”</td>
+<td>Gives concrete action for empty state</td>
+</tr>
+<tr>
+<td>Infinite loop as primary action</td>
+<td>Shell <code>while true</code> loop</td>
+<td>Agent’s “response” never returns</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="troubleshooting-decision-tree">Troubleshooting Decision
+Tree</h2>
+<div class="mermaid">
+flowchart TD
+    START["Agent not processing work items"] --> Q1{"Is kiro-cli<br/>process alive?"}
+    Q1 -->|"No — pgrep shows 0"| R1["Respawn: pool.scale(queue_depth)"]
+    Q1 -->|"Yes"| Q2{"Items in<br/>pending/?"}
+    Q2 -->|"No"| R2["Queue empty — normal idle state<br/>Check orchestrator is enqueuing"]
+    Q2 -->|"Yes"| Q3{"Items in<br/>processing/ > 5min?"}
+    Q3 -->|"Yes"| R3["Stale items — agent crashed mid-task<br/>Run recover_stale() to move back to pending/"]
+    Q3 -->|"No"| Q4{"system_kiro_count()<br/>≥ 15?"}
+    Q4 -->|"Yes"| R4["System cap hit<br/>Kill idle agents: pool.stop_all() then rescale"]
+    Q4 -->|"No"| Q5{"Agent output shows<br/>'task complete'?"}
+    Q5 -->|"Yes"| R5["Prompt engineering failure<br/>Update debate-worker.json prompt, restart agent"]
+    Q5 -->|"No"| R6["Check agent logs<br/>kiro-cli may be waiting for tool confirmation<br/>Add --trust-all-tools flag"]
+</div>
+<hr />
+<h2 id="sequence-work-item-lifecycle">Sequence: Work Item Lifecycle</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant O as Orchestrator
+    participant Q as Filesystem Queue
+    participant A as kiro-cli Agent
+    participant M as MCP Tools
+
+    O->>Q: write pending/0001.json
+    O->>O: pool.scale(queue_depth)
+    loop Poll every 5s
+        A->>Q: ls pending/*.json | head -1
+        Q-->>A: pending/0001.json
+    end
+    A->>Q: mv pending/0001.json processing/0001.json
+    A->>Q: cat processing/0001.json
+    Q-->>A: {task, context, role, ...}
+    A->>M: bible_search("relevant verse")
+    M-->>A: search results
+    A->>M: web_search("supporting evidence")
+    M-->>A: web results
+    A->>Q: write done/0001.json {result: "..."}
+    A->>Q: rm processing/0001.json
+    O->>Q: poll done/0001.json (every 1s)
+    Q-->>O: {result: "debate argument text"}
+    O->>O: continue debate tree
+    Note over A: Agent loops back to polling — never exits
+</div>
+<hr />
+<h2 id="kiro-cli-flags-reference">kiro-cli Flags Reference</h2>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 28%" />
+<col style="width: 53%" />
+</colgroup>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Purpose</th>
+<th>Use In Pattern A</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--no-interactive</code></td>
+<td>Headless mode, exits after response</td>
+<td>Pattern B only</td>
+</tr>
+<tr>
+<td><code>--agent &lt;NAME&gt;</code></td>
+<td>Load agent from <code>~/.kiro/agents/&lt;NAME&gt;.json</code></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>--trust-all-tools</code></td>
+<td>No confirmation prompts</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>--trust-tools &lt;LIST&gt;</code></td>
+<td>Scope to specific tools (52–71% faster)</td>
+<td>Preferred over <code>--trust-all-tools</code></td>
+</tr>
+<tr>
+<td><code>--resume-id &lt;ID&gt;</code></td>
+<td>Resume session metadata (NOT conversation history)</td>
+<td>No — memory via queue files</td>
+</tr>
+<tr>
+<td><code>--model &lt;MODEL&gt;</code></td>
+<td>Override model</td>
+<td>Optional</td>
+</tr>
+<tr>
+<td><code>NO_COLOR=1</code> env var</td>
+<td>Strip ANSI from output</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p><strong>No <code>--persistent</code>, <code>--file</code>,
+<code>--context</code>, or <code>--system-prompt</code> flags
+exist.</strong></p>
+<hr />
+<h2 id="elastic-scaling-rules">Elastic Scaling Rules</h2>
+<table>
+<thead>
+<tr>
+<th>Queue Depth</th>
+<th>Target Pool Size</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–1</td>
+<td>4 (minimum)</td>
+<td>Idle — maintain minimum</td>
+</tr>
+<tr>
+<td>2–5</td>
+<td>4</td>
+<td>No change</td>
+</tr>
+<tr>
+<td>6–9</td>
+<td>4–5</td>
+<td>Spawn 1</td>
+</tr>
+<tr>
+<td>10–15</td>
+<td>5–8</td>
+<td>Spawn up to 4 more</td>
+</tr>
+<tr>
+<td>16–20</td>
+<td>8–10</td>
+<td>Approach maximum</td>
+</tr>
+<tr>
+<td>&gt; 20</td>
+<td>10 (maximum)</td>
+<td>Cap — queue will drain</td>
+</tr>
+<tr>
+<td>System total ≥ 15</td>
+<td>—</td>
+<td>Block all spawning</td>
+</tr>
+</tbody>
+</table>
+<p>Scale formula:
+<code>target = min(POOL_MAX, max(POOL_MIN, queue_depth // 2))</code></p>
+<hr />
+<h2 id="context-window-lifetime-estimate">Context Window Lifetime
+Estimate</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Sonnet 4.5 context window</td>
+<td>200,000 tokens</td>
+</tr>
+<tr>
+<td>Tokens per debate turn (with context)</td>
+<td>~2,000–5,000</td>
+</tr>
+<tr>
+<td>Turns before auto-compaction triggers</td>
+<td>~40–100</td>
+</tr>
+<tr>
+<td>Full debate size (7 depths × 7 exchanges)</td>
+<td>49 turns</td>
+</tr>
+<tr>
+<td>Fits in one session without compaction?</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>After compaction: tool access preserved?</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>Recommended restart threshold (precaution)</td>
+<td>80 turns</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="key-findings-summary">Key Findings Summary</h2>
+<table>
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 39%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Confidence</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>stdin pipe works with <code>--no-interactive</code></td>
+<td>HIGH</td>
+<td>Enables scripted usage</td>
+</tr>
+<tr>
+<td><code>--resume-id</code> does NOT restore conversation history</td>
+<td>HIGH</td>
+<td>Must pass memory in prompt</td>
+</tr>
+<tr>
+<td>Agent JSON format: <code>~/.kiro/agents/*.json</code></td>
+<td>HIGH</td>
+<td>Custom agents are possible</td>
+</tr>
+<tr>
+<td>Filesystem queue needs only shell tools</td>
+<td>HIGH</td>
+<td>No Redis/SQLite dependency</td>
+</tr>
+<tr>
+<td>Context compaction preserves MCP tool access</td>
+<td>HIGH</td>
+<td>Agents survive long debates</td>
+</tr>
+<tr>
+<td>Tool scoping (<code>--trust-tools</code>) reduces overhead
+52–71%</td>
+<td>HIGH</td>
+<td>Use for Pattern B fallback</td>
+</tr>
+<tr>
+<td>System-wide cap: <code>pgrep -c kiro-cli</code></td>
+<td>HIGH</td>
+<td>Enforce ≤ 15 processes</td>
+</tr>
+<tr>
+<td>Pattern A (self-polling) is viable</td>
+<td>HIGH</td>
+<td>Primary recommendation</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="references">References</h2>
+<table>
+<colgroup>
+<col style="width: 34%" />
+<col style="width: 65%" />
+</colgroup>
+<thead>
+<tr>
+<th>Source</th>
+<th>URL / Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prior investigation (Bedrock API)</td>
+<td><code>investigation/dddfdb0e/final_report.md</code></td>
+</tr>
+<tr>
+<td>Performance baseline</td>
+<td><code>investigation/ffe2051b/final_report.md</code></td>
+</tr>
+<tr>
+<td>kiro-cli subagents docs</td>
+<td><code>kiro.dev/docs/cli/chat/subagents/</code></td>
+</tr>
+<tr>
+<td>kiro-cli session management</td>
+<td><code>kiro.dev/docs/cli/chat/sessions/</code></td>
+</tr>
+<tr>
+<td>Agent definitions</td>
+<td><code>~/.kiro/agents/*.json</code></td>
+</tr>
+<tr>
+<td>Current acp.py</td>
+<td><code>truth-seeking-debate/acp.py</code></td>
+</tr>
+</tbody>
+</table>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'default' });
+// Add copy buttons to ALL pre blocks
+document.querySelectorAll('pre').forEach(pre => {
+  if (pre.closest('.mermaid')) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'code-wrapper';
+  pre.parentNode.insertBefore(wrapper, pre);
+  wrapper.appendChild(pre);
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.onclick = function() {
+    const code = pre.querySelector('code') || pre;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  };
+  wrapper.appendChild(btn);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+21:23:01|Starting up
+21:23:24|Starting KB search
+21:24:07|Checking kiro-cli help
+21:24:27|Exploring acp subcommand
+21:25:27|Testing stdin pipe
+21:26:37|Stdin pipe works!
+21:27:24|Web search fallback
+21:27:50|ACP protocol found
+21:28:14|Context compaction docs
+21:30:31|Writing findings
+21:30:40|Findings written

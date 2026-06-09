@@ -1,0 +1,285 @@
+[38;5;11mWARNING: [0mMCP server '[38;5;10mkiro-investigation[0m' is already configured in agent config. Skipping duplicate from legacy mcp.json.
+[38;5;11mWARNING: [0mMCP server '[38;5;10mkiro-investigation[0m' is already configured in agent config. Skipping duplicate from legacy mcp.json.
+[38;5;11mWARNING: [0mMCP server '[38;5;10mkiro-investigation[0m' is already configured in agent config. Skipping duplicate from legacy mcp.json.
+[38;5;11mWARNING: [0mMCP server '[38;5;10mkiro-investigation[0m' is already configured in agent config. Skipping duplicate from legacy mcp.json.
+[38;5;11mWARNING: [0mMCP server '[38;5;10mkiro-investigation[0m' is already configured in agent config. Skipping duplicate from legacy mcp.json.
+[32mAll tools are now trusted ([0m[31m![0m[32m). Kiro will execute tools without asking for confirmation.[0m
+Agents can sometimes do unexpected things so understand the risks.
+
+Learn more at [38;5;141mhttps://kiro.dev/docs/cli/chat/security/#using-tools-trust-all-safely[0m
+
+
+[38;5;12m[1m📷 Checkpoints are enabled! (took 1.01s)
+
+[0m
+[38;5;252m[0m[?25l[?25l[0m[0m[38;5;12mI'll share my reasoning process[0m[38;5;244m (using tool: thinking)[0m: The user wants me to investigate using AWS documentation tools specifically. I need to search and read official AWS docs about implementing an elastic pool of persistent agents. Let me start by searching for relevant AWS documentation on Bedrock Converse API, MCP tools, and related topics. I'll track progress and share findings as I go.
+[38;5;244m - Completed in 1.335s[0m
+[38;5;12m[1m [1.1][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mmkdir -p /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs && printf '%s|Starting AWS investigation\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.222s[0m
+[38;5;12m[1m [1.2][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mcat /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/directives.jsonl 2>/dev/null[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.367s[0m
+[38;5;12m[1m [1.3][0m[0m
+[?25l[0m[?25l[?25l[?25l[0m[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_phrase": "Bedrock Converse API conversation history persistent sessions",
+ ⋮    "search_intent": "Understanding how to maintain persistent conversation sessions with Amazon Bedrock Converse API for multi-turn conversations"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_phrase": "Amazon Bedrock converse stream Python SDK boto3",
+ ⋮    "search_intent": "How to use Bedrock converse_stream API in Python for streaming responses"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_phrase": "Amazon Bedrock tool use function calling MCP",
+ ⋮    "search_intent": "How to integrate external tools with Bedrock Converse API for agent tool use"
+ ⋮  }
+[0m[38;5;244m - Completed in 3.247s[0m
+[38;5;12m[1m [1.4][0m[0m
+[38;5;244m - Completed in 2.761s[0m
+[38;5;12m[1m [1.5][0m[0m
+[38;5;244m - Completed in 2.549s[0m
+[38;5;12m[1m [1.6][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mecho '{"from":"c4-docs","finding":"Bedrock has Session Management APIs (CreateSession, CreateInvocation, PutInvocationStep) for persistent conversation state + Converse API supports multi-turn chat with tool use and streaming"}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.355s[0m
+[38;5;12m[1m [1.7][0m[0m
+[?25l[0m[38;5;141m> [0mNow let me read the key documentation pages:[0m[0m
+[?25l[0m[0m
+[?25l[0m[0m
+[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html",
+ ⋮    "max_length": 10000
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/sessions.html",
+ ⋮    "max_length": 10000
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/tool-use.html",
+ ⋮    "max_length": 10000
+ ⋮  }
+[0m[38;5;244m - Completed in 1.703s[0m
+[38;5;12m[1m [1.8][0m[0m
+[38;5;244m - Completed in 1.524s[0m
+[38;5;12m[1m [1.9][0m[0m
+[38;5;244m - Completed in 1.439s[0m
+[38;5;12m[1m [1.10][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Reading Bedrock APIs\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.260s[0m
+[38;5;12m[1m [1.11][0m[0m
+[?25l[0m[38;5;141m> [0mNow let me search for prompt caching and context window management:[0m[0m
+[?25l[0m[0m
+[?25l[0m[0m
+[?25l[0m[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "How to use prompt caching with Bedrock to cache system prompts and reduce costs",
+ ⋮    "search_phrase": "Amazon Bedrock prompt caching context caching"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "Bedrock Converse API rate limits throttling quotas for concurrent requests",
+ ⋮    "search_phrase": "Amazon Bedrock service quotas rate limits concurrent invocations throttling"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "How to use Bedrock AgentCore for building multi-agent systems with tool access",
+ ⋮    "search_phrase": "Bedrock AgentCore multi-agent orchestration Python"
+ ⋮  }
+[0m[38;5;244m - Completed in 2.455s[0m
+[38;5;12m[1m [1.12][0m[0m
+[38;5;244m - Completed in 2.569s[0m
+[38;5;12m[1m [1.13][0m[0m
+[38;5;244m - Completed in 2.847s[0m
+[38;5;12m[1m [1.14][0m[0m
+[?25l[0m[?25l[?25l[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 10000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html"
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 10000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html"
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.415s[0m
+[38;5;12m[1m [1.15][0m[0m
+[38;5;244m - Completed in 1.292s[0m
+[38;5;12m[1m [1.16][0m[0m
+[38;5;244m - Completed in 1.438s[0m
+[38;5;12m[1m [1.17][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Prompt caching details\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes && echo '{"from":"c4-docs","finding":"Bedrock prompt caching supports 1-hour TTL for Claude Sonnet 4.5/Haiku 4.5 - can cache system prompt + established truths across debate turns. Cache hits NOT deducted against rate limit."}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.192s[0m
+[38;5;12m[1m [1.18][0m[0m
+[?25l[0m[?25l[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html"
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.437s[0m
+[38;5;12m[1m [1.19][0m[0m
+[38;5;244m - Completed in 1.346s[0m
+[38;5;12m[1m [1.20][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|AgentCore and quotas\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes && echo '{"from":"c4-docs","finding":"Bedrock AgentCore has Memory service (short-term + long-term), Gateway for MCP tool access, and multi-agent collaboration with supervisor/collaborator pattern. Works with LangGraph, CrewAI, Strands."}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.261s[0m
+[38;5;12m[1m [1.21][0m[0m
+[?25l[0m[38;5;141m> [0mNow let me get the prompt caching code examples and the Converse API streaming details:[0m[0m
+[?25l[0m[0m
+[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "start_index": 10000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "How to use Bedrock Converse API with tool use in Python including tool configuration and tool results",
+ ⋮    "search_phrase": "Bedrock Converse API tool use Python example toolConfig toolResult",
+ ⋮    "product_types": [
+ ⋮      "Amazon Bedrock"
+ ⋮    ]
+ ⋮  }
+[0m[38;5;244m - Completed in 1.743s[0m
+[38;5;12m[1m [1.22][0m[0m
+[38;5;244m - Completed in 4.838s[0m
+[38;5;12m[1m [1.23][0m[0m
+[?25l[0m[?25l[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html"
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "AWS prescriptive guidance for building multi-agent systems with agentic AI patterns",
+ ⋮    "search_phrase": "agentic AI patterns multi-agent orchestration worker pool",
+ ⋮    "guide_types": [
+ ⋮      "Guide"
+ ⋮    ]
+ ⋮  }
+[0m[38;5;244m - Completed in 1.533s[0m
+[38;5;12m[1m [1.24][0m[0m
+[38;5;244m - Completed in 2.818s[0m
+[38;5;12m[1m [1.25][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Agentic AI patterns\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.434s[0m
+[38;5;12m[1m [1.26][0m[0m
+[?25l[0m[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 10000,
+ ⋮    "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-patterns/index.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.602s[0m
+[38;5;12m[1m [1.27][0m[0m
+[?25l[0m[?25l[?25l[0m[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "AWS prescriptive guidance on agentic AI patterns including parallelization, routing, and orchestration",
+ ⋮    "search_phrase": "agentic AI parallelization routing orchestrator worker pattern",
+ ⋮    "product_types": [
+ ⋮      "AWS Prescriptive Guidance"
+ ⋮    ]
+ ⋮  }
+[0mRunning tool [38;5;141msearch_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "search_intent": "How to use Bedrock AgentCore Gateway to connect MCP servers to agents",
+ ⋮    "search_phrase": "Bedrock AgentCore Gateway MCP server connect tools Python SDK"
+ ⋮  }
+[0m[38;5;244m - Completed in 2.397s[0m
+[38;5;12m[1m [1.28][0m[0m
+[38;5;244m - Completed in 2.731s[0m
+[38;5;12m[1m [1.29][0m[0m
+[?25l[0m[?25l[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-patterns/workflow-for-parallelization.html"
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-patterns/workflow-for-orchestration.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.502s[0m
+[38;5;12m[1m [1.30][0m[0m
+[38;5;244m - Completed in 1.530s[0m
+[38;5;12m[1m [1.31][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Reading gateway docs\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes && echo '{"from":"c4-docs","finding":"AWS Prescriptive Guidance documents Orchestration pattern (central orchestrator delegates to worker agents) and Parallelization pattern (scatter-gather for independent subtasks). Both directly applicable to debate system."}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.216s[0m
+[38;5;12m[1m [1.32][0m[0m
+[?25l[0m[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-agent-integration.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.429s[0m
+[38;5;12m[1m [1.33][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mecho '{"from":"c4-docs","finding":"AgentCore Gateway integration code shows MCP Python SDK pattern: use mcp.client.streamable_http + ClientSession to connect agents to MCP tools. Works with Strands Agent framework and LangGraph."}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.211s[0m
+[38;5;12m[1m [1.34][0m[0m
+[?25l[0m[38;5;141m> [0mNow let me check directives and then search for the Bedrock session store conversation details:[0m[0m
+[?25l[0m[0mI will run the following command: [38;5;141mcat /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/directives.jsonl 2>/dev/null[0m[38;5;244m (using tool: shell)[0m
+
+{"from":"head","to":"c1-internet","directive":"Focus: (1) AutoGen 0.4 agent pool patterns - how it manages persistent workers. (2) LangGraph multi-agent with persistent state. (3) OpenAI Assistants API threads as persistent conversation model. (4) Any Python lib implementing elastic LLM agent pools. Report concrete code patterns, not just names."}
+{"from":"head","to":"c2-kb","directive":"Focus: (1) Bedrock Converse API multi-turn - confirm message history is caller-managed (stateless API). (2) Bedrock Sessions API - does it persist conversation server-side? (3) Anthropic prompt caching for system prompt + established truths. (4) Context window: 200k tokens, when to summarize. Report API shapes."}
+{"from":"head","to":"c3-context","directive":"Focus: (1) asyncio.Queue + worker coroutine pattern for elastic pool. (2) Scale-up trigger: queue.qsize() > threshold. (3) Scale-down: idle timeout per worker. (4) macOS process count check: pgrep -c kiro-cli. (5) Backpressure: asyncio.Semaphore or bounded queue. Report working code skeleton."}
+{"from":"head","to":"c4-docs","directive":"Focus: (1) Bedrock Sessions API docs - does it store conversation history server-side? URL: https://docs.aws.amazon.com/bedrock/latest/userguide/sessions.html. (2) MCP Python SDK - how to run MCP server and call tools from Python client. (3) boto3 bedrock-runtime converse() - confirm messages param is full history each call. Report exact API shapes."}
+{"from":"head","to":"c5-internal","directive":"Focus: (1) Check current debate system codebase at /Users/murivirg/work/github/truth-seeking-debate for existing agent/queue patterns. (2) Find how kiro-cli is currently invoked (subprocess? stdin?). (3) Check if there is any existing session/pool code. (4) Report what exists so we build on it, not duplicate."}
+[38;5;244m - Completed in 1.270s[0m
+[38;5;12m[1m [1.35][0m[0m
+[?25l[0m[?25l[0m[0m[38;5;12mI'll share my reasoning process[0m[38;5;244m (using tool: thinking)[0m: The head agent has given me specific directives:
+1. Bedrock Sessions API docs - does it store conversation history server-side? (I already read this - YES it does, via CreateSession/CreateInvocation/PutInvocationStep)
+2. MCP Python SDK - how to run MCP server and call tools from Python client
+3. boto3 bedrock-runtime converse() - confirm messages param is full history each call
+
+Let me focus on these. I already have the Sessions API info. Now I need to confirm the Converse API is stateless (caller manages messages) and get MCP Python SDK details.
+[38;5;244m - Completed in 1.161s[0m
+[38;5;12m[1m [1.36][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Following directives\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.191s[0m
+[38;5;12m[1m [1.37][0m[0m
+[?25l[0m[?25l[?25l[0m[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html"
+ ⋮  }
+[0mRunning tool [38;5;141mread_documentation[0m with the param[38;5;244m (from mcp server: aws-docs)[0m
+ ⋮  {
+ ⋮    "max_length": 8000,
+ ⋮    "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/sessions-store-coversation.html"
+ ⋮  }
+[0m[38;5;244m - Completed in 1.499s[0m
+[38;5;12m[1m [1.38][0m[0m
+[38;5;244m - Completed in 1.452s[0m
+[38;5;12m[1m [1.39][0m[0m
+[?25l[0m[?25l[0m[0mI will run the following command: [38;5;141mecho '{"from":"c4-docs","finding":"CONFIRMED: Bedrock Converse API is STATELESS - caller must send full messages[] array each call. Bedrock does NOT store text/images. Sessions API is separate service for checkpointing state (preview). Converse API shape: POST /model/{modelId}/converse with messages[], system[], toolConfig{}."}' >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/shared_findings.jsonl[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.325s[0m
+[38;5;12m[1m [1.40][0m[0m
+[?25l[0m[38;5;141m> [0mNow let me write the comprehensive findings file:[0m[0m
+[?25l[0m[0mI will run the following command: [38;5;141mprintf '%s|Writing findings doc\n' "$(date +%H:%M:%S)" >> /Users/murivirg/work/github/truth-seeking-debate/investigation/dddfdb0e/c4-docs/nodes[0m[38;5;244m (using tool: shell)[0m
+
+[38;5;244m - Completed in 1.293s[0m
+[38;5;12m[1m [1.41][0m[0m
+[?25l[0m[?25l

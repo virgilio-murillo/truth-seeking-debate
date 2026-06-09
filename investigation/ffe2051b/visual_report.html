@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report</title>
+<style>
+body { font-family: -apple-system, "Segoe UI", Helvetica Neue, sans-serif; font-size: 11pt; line-height: 1.6; color: #1a1a1a; max-width: 960px; margin: 40px auto; padding: 0 20px; background: #fff; }
+h1 { color: #232f3e; font-size: 22pt; border-bottom: 3px solid #ff9900; padding-bottom: 8px; }
+h2 { color: #0073bb; border-bottom: 2px solid #0073bb; padding-bottom: 4px; font-size: 16pt; margin-top: 2em; }
+h3 { color: #232f3e; font-size: 13pt; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; }
+th { background-color: #232f3e; color: white; padding: 8px; text-align: left; }
+td { border: 1px solid #ddd; padding: 6px 8px; }
+tr:nth-child(even) { background-color: #f8f8f8; }
+code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-size: 10pt; color: #c7254e; }
+pre { background: #1e1e2e; padding: 16px; border-radius: 8px; font-size: 9.5pt; white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+pre code { background: none; color: #cdd6f4; padding: 0; font-size: inherit; }
+blockquote { border-left: 4px solid #0073bb; margin: 12px 0; padding: 8px 16px; background: #f0f7fc; }
+img { max-width: 100%; height: auto; display: block; margin: 12px auto; }
+.mermaid { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 16px 0; text-align: center; }
+.code-wrapper { position: relative; }
+.copy-btn { position: absolute; top: 8px; right: 8px; background: #3498db; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 8pt; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; }
+.copy-btn:hover { opacity: 1; }
+.copy-btn.copied { background: #27ae60; }
+</style>
+</head>
+<body>
+<h1
+id="truth-seeking-debate-system-speed-quality-improvement-report">Truth-Seeking
+Debate System — Speed &amp; Quality Improvement Report</h1>
+<p><strong>Investigation ID:</strong> ffe2051b | <strong>Date:</strong>
+2026-05-13 | <strong>Status:</strong> 27 verdicts / 721 agent calls /
+7.2 hours</p>
+<hr />
+<h2 id="executive-summary">Executive Summary</h2>
+<p>The truth-seeking debate system spent 7.2 hours producing 27 verdicts
+by launching 721 kiro-cli subprocess calls — each carrying 15–30 seconds
+of MCP initialization overhead before any LLM work begins. Three
+compounding problems account for nearly all the waste: subprocess
+overhead inflates every call by 2–5x versus direct API, depth explosion
+multiplies the call count by 10x through recursive child contentions,
+and 46% of judged contentions were ruled “both_correct” — meaning the
+system debated questions that had no genuine disagreement. Fixing all
+three reduces estimated wall time from <strong>7.2 hours to 15–20
+minutes</strong> (20–55x speedup) for equivalent debate depth. The
+changes are incremental: config edits take 2 minutes, parallel A+B takes
+30 minutes, and the Bedrock API migration takes roughly 1 hour.</p>
+<hr />
+<h2 id="current-vs.-proposed-architecture">Current vs. Proposed
+Architecture</h2>
+<div class="mermaid">
+graph TD
+    subgraph CURRENT["Current Architecture — 7.2h / 721 calls"]
+        A1["Opening A<br/>kiro-cli 303s"] --> C["Contention ID<br/>kiro-cli 51s"]
+        A2["Opening B<br/>kiro-cli 163s"] --> C
+        C --> Q["Priority Queue<br/>4 workers, sem=10"]
+        Q --> R1A["Round 1A<br/>kiro-cli 83s"]
+        R1A --> R1B["Round 1B<br/>kiro-cli 83s"]
+        R1B --> DOTS["... 7 rounds sequential ..."]
+        DOTS --> J["Judge<br/>kiro-cli 144s"]
+        R1A -->|"CHILD_CONTENTION"| GATE["Relevance Gate<br/>47s — 67% pass"]
+        GATE -->|"pass"| CHILD["Child Contention<br/>depth 1–7, 56 total"]
+        CHILD --> Q
+    end
+
+    subgraph PROPOSED["Proposed Architecture — est. 15–20 min"]
+        B1["Opening A+B<br/>Bedrock parallel 30s"] --> C2["Pre-screen<br/>genuinely contradictory?"]
+        C2 -->|"no — 46% of cases"| SKIP["both_correct<br/>1 call, done"]
+        C2 -->|"yes"| Q2["Priority Queue<br/>8 workers, sem=20"]
+        Q2 --> PAR["Round N A+B<br/>Bedrock parallel 20s"]
+        PAR --> CONV["Convergence check<br/>after round 3"]
+        CONV -->|"converged"| J2["Judge<br/>Bedrock 30s"]
+        CONV -->|"still diverged"| PAR
+        PAR -->|"CHILD threshold=0.85"| GATE2["Relevance Gate<br/>max 2 children/node"]
+        GATE2 --> CHILD2["Child depth ≤ 3"]
+        CHILD2 --> Q2
+    end
+</div>
+<hr />
+<h2 id="root-cause-analysis">Root Cause Analysis</h2>
+<h3
+id="problem-1-kiro-cli-subprocess-overhead-primary-bottleneck">Problem 1
+— kiro-cli Subprocess Overhead (Primary Bottleneck)</h3>
+<p>Every agent call spawns a full kiro-cli process: loads agent config,
+initializes MCP servers (bible-tools, web_search), authenticates, then
+runs the LLM. From <code>debate.log</code> analysis of 717 completed
+calls:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Median call duration</td>
+<td>83s</td>
+</tr>
+<tr>
+<td>Mean call duration</td>
+<td>145s</td>
+</tr>
+<tr>
+<td>Max call duration</td>
+<td>5,614s</td>
+</tr>
+<tr>
+<td>Estimated MCP init overhead</td>
+<td>15–30s per call</td>
+</tr>
+<tr>
+<td>Direct Bedrock API latency (Claude Sonnet)</td>
+<td>5–30s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Fix:</strong> Replace <code>acp.py call_agent()</code> with
+<code>boto3 bedrock-runtime invoke_model</code>. Eliminates MCP init
+entirely.</p>
+<h3 id="problem-2-depth-explosion-10x-call-multiplier">Problem 2 — Depth
+Explosion (10x Call Multiplier)</h3>
+<table>
+<thead>
+<tr>
+<th>Depth</th>
+<th>Contentions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 (root)</td>
+<td>5</td>
+</tr>
+<tr>
+<td>1</td>
+<td>14</td>
+</tr>
+<tr>
+<td>2</td>
+<td>8</td>
+</tr>
+<tr>
+<td>3</td>
+<td>11</td>
+</tr>
+<tr>
+<td>4</td>
+<td>11</td>
+</tr>
+<tr>
+<td>5</td>
+<td>6</td>
+</tr>
+<tr>
+<td>6</td>
+<td>5</td>
+</tr>
+<tr>
+<td>7</td>
+<td>1</td>
+</tr>
+<tr>
+<td><strong>Total children</strong></td>
+<td><strong>56</strong></td>
+</tr>
+</tbody>
+</table>
+<p>83 relevance gate calls were made; 56 passed (67% pass rate). The
+gate threshold of 0.6 is too permissive. Children spawn as early as
+Round 1 — 18 of 56 children were spawned in R1A or R1B before any real
+debate occurred.</p>
+<p><strong>Fix:</strong> Raise <code>RELEVANCE_THRESHOLD</code> to 0.85,
+set <code>MAX_DEPTH=3</code>, add
+<code>MAX_CHILDREN_PER_NODE=2</code>.</p>
+<h3 id="problem-3-46-both-correct-verdicts-wasted-debate">Problem 3 —
+46% “Both Correct” Verdicts (Wasted Debate)</h3>
+<p>28 contentions went to judge; 13 (46%) were ruled
+<code>both_correct</code>. Each wasted 14+ agent calls (7 rounds × 2
+teams) before the judge confirmed both sides were right. The iMAD paper
+(arxiv 2511.11306, AAAI 2026 Oral) quantifies this pattern: MAD uses
+3–5x more tokens than single-agent with only 1.5–5.3% accuracy gain on
+average when applied indiscriminately.</p>
+<p><strong>Fix:</strong> Pre-screen every contention with a single cheap
+call before starting debate. If positions are not genuinely
+contradictory, mark <code>both_correct</code> immediately.</p>
+<h3 id="problem-4-sequential-ab-wastes-50-of-round-time">Problem 4 —
+Sequential A→B Wastes 50% of Round Time</h3>
+<p>In <code>_run_contention()</code>, Team B waits for Team A to
+complete before starting. Since each team’s response in round N only
+depends on round N-1’s opponent response (not the current round), A and
+B can run in parallel with <code>asyncio.gather()</code>.</p>
+<h3 id="problem-5-growing-established-truths-context">Problem 5 —
+Growing ESTABLISHED TRUTHS Context</h3>
+<p>The truths section is included in every prompt and grows with each
+verdict. By round 7 of a deep contention, this section can exceed 2,000
+tokens. Bedrock prompt caching (ephemeral, 5-min TTL) can cache this
+section since it’s identical across concurrent calls — reducing cost
+45–80% and latency 13–31%.</p>
+<hr />
+<h2 id="speedup-decision-tree">Speedup Decision Tree</h2>
+<div class="mermaid">
+graph TD
+    START["System too slow?"] --> Q1{"Have Bedrock<br/>API access?"}
+    Q1 -->|"No"| Q1N["Request access<br/>aws bedrock list-foundation-models"]
+    Q1 -->|"Yes"| R1["R1: Config changes<br/>2 min — immediate impact"]
+    R1 --> Q2{"Still too slow<br/>after config?"}
+    Q2 -->|"No — good enough"| DONE["Done. Monitor."]
+    Q2 -->|"Yes"| R2["R2: Replace acp.py<br/>with Bedrock API — 1h"]
+    R2 --> Q3{"Parallel A+B<br/>implemented?"}
+    Q3 -->|"No"| R3["R3: asyncio.gather<br/>for A+B — 30 min"]
+    Q3 -->|"Yes"| Q4{"Pre-screen<br/>implemented?"}
+    R3 --> Q4
+    Q4 -->|"No"| R4["R4: Selective debate<br/>trigger — 45 min"]
+    Q4 -->|"Yes"| Q5{"Prompt caching<br/>enabled?"}
+    R4 --> Q5
+    Q5 -->|"No"| R5["R5: cache_control<br/>on truths section — 30 min"]
+    Q5 -->|"Yes"| DONE2["Target: 15–20 min<br/>for equivalent depth"]
+</div>
+<hr />
+<h2 id="implementation-guide">Implementation Guide</h2>
+<h3 id="step-1-config-changes-2-minutes-immediate">Step 1 — Config
+Changes (2 minutes, immediate)</h3>
+<p>Edit <code>config.py</code>:</p>
+<pre class="python"><code>MAX_DEPTH = 3               # was 7 — eliminates 41% of children
+MAX_EXCHANGES = 4           # was 7 — 43% fewer debate calls per contention
+RELEVANCE_THRESHOLD = 0.80  # was 0.60 — reduces gate pass rate from 67% to ~30%
+RELEVANCE_THRESHOLD_DEEP = 0.90  # was 0.80
+MAX_CHILDREN_PER_NODE = 2   # new — hard cap per contention
+MAX_INITIAL_CONTENTIONS = 5 # new — cap root contentions
+MAX_TOTAL_CALLS = 200       # new — hard budget across entire run</code></pre>
+<p>This alone reduces estimated calls from 721 to ~300 with no code
+changes beyond config.</p>
+<h3 id="step-2-verify-bedrock-access-5-minutes">Step 2 — Verify Bedrock
+Access (5 minutes)</h3>
+<pre class="bash"><code>aws bedrock-runtime invoke-model --model-id us.anthropic.claude-sonnet-4-5-20251001-v1:0 --body &#39;{&quot;anthropic_version&quot;:&quot;bedrock-2023-05-31&quot;,&quot;max_tokens&quot;:100,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;ping&quot;}]}&#39; --region us-east-1 /tmp/bedrock_test.json &amp;&amp; cat /tmp/bedrock_test.json</code></pre>
+<h3 id="step-3-replace-acp.py-with-direct-bedrock-api-1-hour">Step 3 —
+Replace acp.py with Direct Bedrock API (1 hour)</h3>
+<p>Replace the entire <code>call_agent()</code> function in
+<code>acp.py</code>:</p>
+<pre class="python"><code>import boto3, asyncio, json
+from functools import partial
+
+_client = boto3.client(&quot;bedrock-runtime&quot;, region_name=&quot;us-east-1&quot;)
+_sem = asyncio.Semaphore(20)  # raised from 10
+
+async def call_agent(prompt: str, system: str = &quot;&quot;) -&gt; str:
+    body = {
+        &quot;anthropic_version&quot;: &quot;bedrock-2023-05-31&quot;,
+        &quot;max_tokens&quot;: 600,
+        &quot;system&quot;: system,
+        &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: prompt}]
+    }
+    async with _sem:
+        loop = asyncio.get_event_loop()
+        resp = await loop.run_in_executor(
+            None,
+            partial(_client.invoke_model,
+                    modelId=&quot;us.anthropic.claude-sonnet-4-5-20251001-v1:0&quot;,
+                    body=json.dumps(body))
+        )
+        return json.loads(resp[&quot;body&quot;].read())[&quot;content&quot;][0][&quot;text&quot;]</code></pre>
+<p>Key changes vs current <code>acp.py</code>: - No subprocess spawn —
+eliminates 15–30s MCP init per call - <code>max_tokens=600</code> —
+enforces conciseness, reduces cost - Semaphore raised to 20 — more
+concurrency without subprocess overhead - Workers in
+<code>orchestrator.py</code> should be raised from 4 to 8</p>
+<h3 id="step-4-parallel-team-a-team-b-30-minutes">Step 4 — Parallel Team
+A + Team B (30 minutes)</h3>
+<p>In <code>orchestrator.py</code>, replace the sequential loop in
+<code>_run_contention()</code>:</p>
+<pre class="python"><code># BEFORE (sequential — wastes 50% of round time)
+resp_a = await call_agent(debate_round_prompt(node, history, &quot;A&quot;, round_num))
+resp_b = await call_agent(debate_round_prompt(node, history, &quot;B&quot;, round_num))
+
+# AFTER (parallel — each team responds to PREVIOUS round&#39;s opponent)
+resp_a, resp_b = await asyncio.gather(
+    call_agent(debate_round_prompt(node, history, &quot;A&quot;, round_num)),
+    call_agent(debate_round_prompt(node, history, &quot;B&quot;, round_num))
+)</code></pre>
+<p>Each team’s prompt uses <code>history[-1]</code> (previous round’s
+opponent response), not the current round’s — so there’s no dependency
+between A and B within the same round.</p>
+<h3 id="step-5-selective-debate-trigger-45-minutes">Step 5 — Selective
+Debate Trigger (45 minutes)</h3>
+<p>Add a pre-screen before starting any contention:</p>
+<pre class="python"><code>PRESCREEN_PROMPT = &quot;&quot;&quot;
+Given these two positions, are they GENUINELY CONTRADICTORY (one must be wrong)?
+Or are they COMPLEMENTARY (both can be true)?
+
+Position A: {pos_a}
+Position B: {pos_b}
+
+Reply with exactly one word: CONTRADICTORY or COMPLEMENTARY.
+&quot;&quot;&quot;
+
+async def _prescreen(node: ContentionNode) -&gt; bool:
+    resp = await call_agent(PRESCREEN_PROMPT.format(
+        pos_a=node.team_a_opening, pos_b=node.team_b_opening
+    ))
+    return &quot;CONTRADICTORY&quot; in resp.upper()
+
+# In _run_contention(), before the debate loop:
+if not await _prescreen(node):
+    node.verdict = Verdict(winner=&quot;both_correct&quot;, reason=&quot;Pre-screen: not contradictory&quot;)
+    return</code></pre>
+<p>This eliminates the 46% of contentions that currently waste 14+ calls
+each.</p>
+<h3 id="step-6-prompt-caching-for-established-truths-30-minutes">Step 6
+— Prompt Caching for Established Truths (30 minutes)</h3>
+<p>Move the truths section to the system prompt with Bedrock cache
+control:</p>
+<pre class="python"><code>def build_system_prompt(truths: list[str]) -&gt; dict:
+    truths_text = &quot;\n&quot;.join(f&quot;- {t}&quot; for t in truths)
+    return {
+        &quot;text&quot;: f&quot;ESTABLISHED TRUTHS:\n{truths_text}&quot;,
+        &quot;cachePoint&quot;: {&quot;type&quot;: &quot;default&quot;}  # Bedrock cache_control
+    }</code></pre>
+<p>Requirements: minimum 1,024 tokens (Claude 3.7 Sonnet), 5-minute TTL
+(resets on hit). The truths section exceeds this threshold after ~5
+verdicts.</p>
+<h3 id="step-7-conciseness-constraint-15-minutes">Step 7 — Conciseness
+Constraint (15 minutes)</h3>
+<p>Add to every prompt in <code>prompts.py</code>:</p>
+<pre><code>CRITICAL: Respond in under 400 words. No preamble. Evidence and argument only.</code></pre>
+<p>And add <code>max_tokens=600</code> to all Bedrock calls (already
+included in Step 3).</p>
+<hr />
+<h2 id="sequence-optimized-debate-round">Sequence: Optimized Debate
+Round</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant O as Orchestrator
+    participant PS as Pre-screen
+    participant A as Team A (Bedrock)
+    participant B as Team B (Bedrock)
+    participant J as Judge (Bedrock)
+    participant C as Cache (Bedrock)
+
+    O->>PS: Are positions contradictory?
+    PS-->>O: CONTRADICTORY (or COMPLEMENTARY → skip)
+
+    Note over O: Round 1 — parallel
+    O->>C: Cache truths section (system prompt)
+    C-->>O: cache_id
+    par Parallel execution
+        O->>A: Round 1 prompt + cache_id
+        O->>B: Round 1 prompt + cache_id
+    end
+    A-->>O: Response A1 (≤400 words)
+    B-->>O: Response B1 (≤400 words)
+
+    Note over O: Round 2 — each sees other's R1
+    par Parallel execution
+        O->>A: Round 2 prompt (sees B1) + cache_id
+        O->>B: Round 2 prompt (sees A1) + cache_id
+    end
+    A-->>O: Response A2
+    B-->>O: Response B2
+
+    Note over O: Convergence check after round 3
+    O->>O: overlap(A3, B3) > 0.8?
+    alt Converged
+        O->>J: Judge final positions
+        J-->>O: Verdict
+    else Still diverged (max round 4)
+        O->>A: Round 4 prompt
+        O->>B: Round 4 prompt
+        O->>J: Judge
+        J-->>O: Verdict
+    end
+
+    O->>O: Add verdict to truths
+    O->>C: Invalidate truths cache (new truth added)
+</div>
+<hr />
+<h2 id="impact-summary">Impact Summary</h2>
+<table>
+<colgroup>
+<col style="width: 21%" />
+<col style="width: 21%" />
+<col style="width: 39%" />
+<col style="width: 18%" />
+</colgroup>
+<thead>
+<tr>
+<th>Change</th>
+<th>Effort</th>
+<th>Speedup Factor</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Config: MAX_DEPTH 7→3, MAX_EXCHANGES 7→4</td>
+<td>2 min</td>
+<td>2.5x</td>
+<td>Immediate, no code change</td>
+</tr>
+<tr>
+<td>Direct Bedrock API (replace kiro-cli)</td>
+<td>1 hr</td>
+<td>1.6x per call</td>
+<td>Eliminates MCP init overhead</td>
+</tr>
+<tr>
+<td>Parallel A+B per round</td>
+<td>30 min</td>
+<td>1.7x on 81% of calls</td>
+<td>asyncio.gather, no logic change</td>
+</tr>
+<tr>
+<td>Selective debate trigger (pre-screen)</td>
+<td>45 min</td>
+<td>1.8x</td>
+<td>Eliminates 46% of contentions</td>
+</tr>
+<tr>
+<td>Prompt caching for truths</td>
+<td>30 min</td>
+<td>1.2x latency, 0.55x cost</td>
+<td>Requires Bedrock API first</td>
+</tr>
+<tr>
+<td>Conciseness constraint (400 words)</td>
+<td>15 min</td>
+<td>1.3x</td>
+<td>Reduces token count and latency</td>
+</tr>
+<tr>
+<td><strong>Combined (all changes)</strong></td>
+<td><strong>~3 hrs</strong></td>
+<td><strong>20–55x</strong></td>
+<td><strong>7.2h → 15–20 min</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="quality-improvements">Quality Improvements</h2>
+<h3 id="steelman-requirement">Steelman Requirement</h3>
+<p>Add to <code>debate_round_prompt</code> for rounds 1 and 2:</p>
+<pre><code>Before making your argument, in 2 sentences, steelman the opposing position —
+state the strongest version of their argument. Then rebut it.</code></pre>
+<p>This forces genuine engagement and reduces the “talking past each
+other” pattern that leads to <code>both_correct</code> verdicts.</p>
+<h3 id="truth-deduplication">Truth Deduplication</h3>
+<p>After each verdict, before appending to the truths list, run a dedup
+check:</p>
+<pre class="python"><code>DEDUP_PROMPT = &quot;&quot;&quot;
+Is this new truth semantically equivalent to any existing truth?
+New: {new_truth}
+Existing: {existing_truths}
+Reply YES or NO only.
+&quot;&quot;&quot;</code></pre>
+<p>Only append if the check returns NO. This prevents the truths section
+from growing with redundant entries.</p>
+<h3 id="judge-quality-final-positions-only">Judge Quality: Final
+Positions Only</h3>
+<p>The current judge sees the full exchange history. Research on
+LLM-as-judge (arxiv 2306.05685) shows judges perform better when
+evaluating final positions rather than full transcripts — they are less
+susceptible to recency bias and verbose padding. Change
+<code>judge_prompt</code> to include only the final round’s responses
+from each team.</p>
+<h3 id="better-contention-identification">Better Contention
+Identification</h3>
+<p>Replace the current “identify all contentions” approach with a
+structured extraction:</p>
+<pre><code>Identify at most 5 BINARY contentions — claims where exactly one side must be wrong.
+Format: &quot;Claim: X. Team A asserts TRUE. Team B asserts FALSE.&quot;
+Exclude: matters of preference, context-dependent claims, complementary perspectives.</code></pre>
+<p>This directly addresses the 46% <code>both_correct</code> rate at the
+source.</p>
+<hr />
+<h2 id="references">References</h2>
+<ol type="1">
+<li><strong>iMAD paper</strong> — arxiv 2511.11306 (AAAI 2026 Oral):
+Selective MAD triggering reduces tokens 92%, improves accuracy 13.5% —
+<a
+href="https://arxiv.org/abs/2511.11306">https://arxiv.org/abs/2511.11306</a></li>
+<li><strong>Prompt caching latency study</strong> — arxiv 2601.06007:
+45–80% cost reduction, 13–31% latency reduction — <a
+href="https://arxiv.org/abs/2601.06007">https://arxiv.org/abs/2601.06007</a></li>
+<li><strong>Bedrock Converse API</strong> — streaming, multi-turn, tool
+use, prompt caching — <a
+href="https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html">https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html</a></li>
+<li><strong>Bedrock prompt caching</strong> — min 1024 tokens (Claude
+3.7 Sonnet), 5-min TTL, up to 4 checkpoints — <a
+href="https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html">https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html</a></li>
+<li><strong>LLM-as-Judge</strong> — arxiv 2306.05685: position bias,
+verbosity bias in LLM judges — <a
+href="https://arxiv.org/abs/2306.05685">https://arxiv.org/abs/2306.05685</a></li>
+<li><strong>debate.log analysis</strong> — 717 completed calls: median
+83s, mean 145s, max 5614s (direct log analysis)</li>
+<li><strong>Source code analysis</strong> — 56 children at depths 1–7,
+46% both_correct verdicts, 67% gate pass rate (c3-context findings)</li>
+<li><strong>AWS Prescriptive Guidance</strong> — SQS/DynamoDB/Step
+Functions pattern for multi-agent orchestration — <a
+href="https://aws.amazon.com/prescriptive-guidance/">https://aws.amazon.com/prescriptive-guidance/</a></li>
+</ol>
+<hr />
+<p><em>Report generated: 2026-05-13T20:37 | Investigation ffe2051b | All
+findings from final_report.md</em></p>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'default' });
+// Add copy buttons to ALL pre blocks
+document.querySelectorAll('pre').forEach(pre => {
+  if (pre.closest('.mermaid')) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'code-wrapper';
+  pre.parentNode.insertBefore(wrapper, pre);
+  wrapper.appendChild(pre);
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.onclick = function() {
+    const code = pre.querySelector('code') || pre;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  };
+  wrapper.appendChild(btn);
+});
+</script>
+</body>
+</html>

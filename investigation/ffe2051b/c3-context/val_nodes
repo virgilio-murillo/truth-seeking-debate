@@ -1,0 +1,10 @@
+20:35:38|Starting validation
+20:35:59|Reading findings file
+20:36:20|Checking source code
+20:36:37|Validating call stats
+20:37:55|Validating AWS claims
+20:38:16|Checking research papers
+20:38:56|Validating code claims
+20:39:51|Checking model IDs
+20:41:16|Writing validated file
+20:42:38|Validation complete

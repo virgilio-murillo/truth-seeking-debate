@@ -1,0 +1,3 @@
+{"from":"head","to":"all","directive":"All children have reported. Finalize your findings. No further investigation needed. Write any remaining findings to shared_findings.jsonl and stop."}
+{"from":"head","to":"c3-context","directive":"PRIORITY: Compute exact agent call time distribution from debate.log (p50, p90, p99). Also count how many contentions were spawned at round 1 vs later rounds. This is critical for quantifying the depth explosion."}
+{"from":"head","to":"c1-internet","directive":"Find the iMAD paper (arxiv 2511.11306) convergence detection algorithm details. Specifically: what signals does it use to decide whether to trigger debate? Also find any benchmarks on Bedrock ConverseStream latency vs subprocess."}

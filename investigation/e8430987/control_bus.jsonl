@@ -1,0 +1,4 @@
+{"action":"redirect","target":"c5-internal","new_task":"Test kiro-cli interactive mode via pexpect/ptyprocess. What is the output delimiter when response is complete? Can we detect end-of-response reliably?"}
+{"action":"redirect","target":"c4-docs","new_task":"Measure kiro-cli context window lifetime. How many turns before auto-compaction? Does compaction preserve MCP tool access?"}
+{"action":"skip_validation","target":"c2-kb","reason":"KB findings on --trust-all-tools and tool scoping are well-established. No further validation needed."}
+{"action":"finalize","reason":"HEAD AGENT has verified all critical findings via live tests. 5 child streams contributed. All contradictions resolved. Final report written."}
